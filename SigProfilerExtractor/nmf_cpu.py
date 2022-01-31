@@ -13,11 +13,25 @@ from datetime import datetime
 
 from nimfa.methods.seeding import nndsvd
 import numpy as np
-import torch
+import torch,pdb
 import torch.nn
 from torch import nn
+from sklearn.cluster import KMeans
+import sys
+import pdb
 
+class ForkedPdb(pdb.Pdb):
+    """A Pdb subclass that may be used
+    from a forked multiprocessing child
 
+    """
+    def interaction(self, *args, **kwargs):
+        _stdin = sys.stdin
+        try:
+            sys.stdin = open('/dev/stdin')
+            pdb.Pdb.interaction(self, *args, **kwargs)
+        finally:
+            sys.stdin = _stdin
 class NMF:
     def __init__(self, V, rank, max_iterations=200000, tolerance=1e-8, test_conv=1000, gpu_id=0, generator=None,
                  init_method='nndsvd', floating_point_precision='single', min_iterations=2000):
@@ -107,6 +121,16 @@ class NMF:
             for i in range(self._V.shape[0]):
                 vin = np.mat(self._V.cpu().numpy()[i])
                 W[i,:,:], H[i,:,:] = nv.initialize(vin, self._rank, options={'flag': 2})
+        elif init_method == 'clustering':
+            W = np.zeros([self._V.shape[0], self._V.shape[1], self._rank])
+            H = np.random.rand(self._V.shape[0], self._rank, self._V.shape[2])
+            X_toclust = np.squeeze(self._V.detach().numpy()).T
+            kmeans_fit = KMeans(n_clusters=self._rank, random_state=0).fit(X_toclust)
+            W[0,:,:] = kmeans_fit.cluster_centers_.T
+            # nv = nndsvd.Nndsvd()
+            # for i in range(self._V.shape[0]):
+            #     vin = np.mat(self._V.cpu().numpy()[i])
+            #     W[i,:,:], H[i,:,:] = nv.initialize(vin, self._rank, options={'flag': 2})
         elif init_method =='nndsvd_min':
            W = np.zeros([self._V.shape[0], self._V.shape[1], self._rank])
            H = np.zeros([self._V.shape[0], self._rank, self._V.shape[2]])
